@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import Auth from "@/pages/Auth";
+import Landing from "@/pages/Landing";
+import Docs from "@/pages/Docs";
 import Dashboard from "@/pages/Dashboard";
 import Databases from "@/pages/Databases";
 import DatabaseDetail from "@/pages/DatabaseDetail";
@@ -40,6 +42,8 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/docs" element={<Docs />} />
             <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/databases" element={<ProtectedRoute><Databases /></ProtectedRoute>} />
