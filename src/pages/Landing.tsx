@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Database, Key, BarChart3, Code2, Zap, Shield, BookOpen, ArrowRight, Terminal, Layers } from "lucide-react";
+import { Database, Key, BarChart3, Code2, Zap, Shield, BookOpen, ArrowRight, Terminal, Layers, FileJson, Copyright } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const features = [
@@ -9,24 +9,24 @@ const features = [
     desc: "Spin up a new database in seconds. Define tables and columns with a visual editor — no SQL required.",
   },
   {
+    icon: FileJson,
+    title: "JSON File Storage",
+    desc: "All data persists in mainwebdb.json via localStorage. Export, import, and manage your data file anytime.",
+  },
+  {
     icon: Key,
     title: "API Key Auth",
     desc: "Each database gets a unique API key. Manage, rotate, and revoke keys from your dashboard.",
   },
   {
     icon: Code2,
-    title: "REST API",
+    title: "REST API Ready",
     desc: "Full CRUD via a simple JSON REST API. Works with any language — React, Node.js, Python, and more.",
   },
   {
-    icon: Zap,
-    title: "Blazing Fast",
-    desc: "Edge-deployed functions ensure low latency worldwide. Your data is always close to your users.",
-  },
-  {
     icon: Shield,
-    title: "Secure by Default",
-    desc: "Row-level security, encrypted API keys, and per-user data isolation out of the box.",
+    title: "Auto Copyright Protection",
+    desc: "Built-in copyright strike system automatically protects your content with DMCA-ready notices.",
   },
   {
     icon: BarChart3,
@@ -35,15 +35,15 @@ const features = [
   },
 ];
 
-const codeSnippet = `// Insert data with a single fetch call
-const res = await fetch("https://api.clouddb.dev/v1", {
+const codeSnippet = `// GFX DB — Insert data with a single fetch call
+const res = await fetch("https://gfxdb.lovable.app/api", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    api_key: "your-api-key",
+    api_key: "gfx_your-api-key",
     action: "insert",
     table: "users",
-    data: { name: "Alice", email: "alice@example.com" }
+    data: { name: "Parvez", email: "parvez@gfxdev.com" }
   })
 });
 const { data } = await res.json();`;
@@ -58,7 +58,7 @@ const Landing = () => {
             <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center">
               <Database className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight font-[Space_Grotesk]">CloudDB</span>
+            <span className="text-xl font-bold tracking-tight font-[Space_Grotesk]">GFX DB</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link to="/docs">
@@ -82,15 +82,16 @@ const Landing = () => {
         }} />
         <div className="max-w-4xl mx-auto px-6 pt-24 pb-20 text-center relative">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8">
-            <Zap className="w-3.5 h-3.5" /> Now in Public Beta
+            <Zap className="w-3.5 h-3.5" /> JSON-Powered Database Platform
           </div>
           <h1 className="text-5xl md:text-7xl font-extrabold leading-tight tracking-tight font-[Space_Grotesk] mb-6">
-            Your data,{" "}
-            <span className="gradient-text">one&nbsp;API&nbsp;away</span>
+            GFX <span className="gradient-text">DB</span>
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            Create databases, define schemas, and get a production-ready REST API instantly. 
-            No servers to manage — just JSON&nbsp;in,&nbsp;JSON&nbsp;out.
+          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4 leading-relaxed">
+            Create databases, define schemas, and manage all your data — stored in a single <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-primary">mainwebdb.json</code> file.
+          </p>
+          <p className="text-sm text-muted-foreground mb-10">
+            By <span className="font-semibold text-primary">GFX DEVELOPER PARVEZ</span>
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/auth">
@@ -133,7 +134,7 @@ const Landing = () => {
             Everything you need to ship&nbsp;faster
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            From schema design to production analytics — CloudDB handles the backend so you can focus on your product.
+            From schema design to copyright protection — GFX DB handles everything so you can focus on building.
           </p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -153,11 +154,11 @@ const Landing = () => {
       <section className="border-t border-border bg-muted/30">
         <div className="max-w-4xl mx-auto px-6 py-24">
           <h2 className="text-3xl md:text-4xl font-bold font-[Space_Grotesk] text-center mb-16">
-            Three steps to your&nbsp;API
+            Three steps to your&nbsp;database
           </h2>
           <div className="grid md:grid-cols-3 gap-10">
             {[
-              { step: "1", icon: Layers, title: "Create a Database", desc: "Name it, describe it, and your database is live." },
+              { step: "1", icon: Layers, title: "Create a Database", desc: "Name it, describe it, and your database is live in localStorage." },
               { step: "2", icon: Terminal, title: "Define Your Schema", desc: "Add tables and columns with our visual editor." },
               { step: "3", icon: Code2, title: "Start Querying", desc: "Grab your API key and make your first request." },
             ].map((s) => (
@@ -173,13 +174,28 @@ const Landing = () => {
         </div>
       </section>
 
+      {/* Copyright notice */}
+      <section className="max-w-4xl mx-auto px-6 py-16">
+        <div className="glass-card rounded-2xl p-8 text-center">
+          <Copyright className="w-10 h-10 text-primary mx-auto mb-4" />
+          <h3 className="text-xl font-bold font-[Space_Grotesk] mb-3">Auto Copyright Protection</h3>
+          <p className="text-muted-foreground text-sm max-w-lg mx-auto mb-4">
+            All content created on GFX DB is automatically protected under copyright law. 
+            Unauthorized reproduction, distribution, or modification of any content is strictly prohibited.
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
+            <Shield className="w-4 h-4" /> DMCA Protected · Auto Strike System Active
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="max-w-4xl mx-auto px-6 py-24 text-center">
         <h2 className="text-3xl md:text-5xl font-bold font-[Space_Grotesk] mb-6">
           Ready to build?
         </h2>
         <p className="text-lg text-muted-foreground mb-10 max-w-lg mx-auto">
-          Create your first database in under a minute. No credit card required.
+          Create your first database in under a minute. No server needed — everything runs locally.
         </p>
         <Link to="/auth">
           <Button size="lg" className="gradient-primary border-0 text-white text-base px-10 h-12 gap-2">
@@ -195,13 +211,17 @@ const Landing = () => {
             <div className="w-6 h-6 rounded-lg gradient-primary flex items-center justify-center">
               <Database className="w-3 h-3 text-white" />
             </div>
-            <span className="font-semibold text-foreground font-[Space_Grotesk]">CloudDB</span>
+            <span className="font-semibold text-foreground font-[Space_Grotesk]">GFX DB</span>
           </div>
           <div className="flex gap-6">
             <Link to="/docs" className="hover:text-foreground transition-colors">Documentation</Link>
             <Link to="/auth" className="hover:text-foreground transition-colors">Sign In</Link>
           </div>
-          <span>© 2026 CloudDB. All rights reserved.</span>
+          <div className="text-center">
+            <span>© {new Date().getFullYear()} GFX DB. All rights reserved.</span>
+            <br />
+            <span className="text-xs">Developed by <span className="font-semibold text-primary">GFX DEVELOPER PARVEZ</span></span>
+          </div>
         </div>
       </footer>
     </div>

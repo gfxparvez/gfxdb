@@ -1,48 +1,37 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { loadDB, QueryLogRecord, DatabaseRecord } from "@/lib/mainwebdb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Activity } from "lucide-react";
+import { Activity } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import type { Tables } from "@/integrations/supabase/types";
-
-type Log = Tables<"query_logs">;
 
 const QueryLogs = () => {
   const { user } = useAuth();
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [databases, setDatabases] = useState<Tables<"databases">[]>([]);
+  const [logs, setLogs] = useState<QueryLogRecord[]>([]);
+  const [databases, setDatabases] = useState<DatabaseRecord[]>([]);
   const [filterDb, setFilterDb] = useState("all");
   const [filterMethod, setFilterMethod] = useState("all");
-  const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<{ date: string; count: number }[]>([]);
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("databases").select("*").then(({ data }) => setDatabases(data || []));
-  }, [user]);
+    const db = loadDB();
+    setDatabases(db.databases.filter(d => d.user_id === user.id));
+    let filtered = db.query_logs.filter(l => l.user_id === user.id);
+    if (filterDb !== "all") filtered = filtered.filter(l => l.database_id === filterDb);
+    if (filterMethod !== "all") filtered = filtered.filter(l => l.method === filterMethod);
+    filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    setLogs(filtered.slice(0, 200));
 
-  useEffect(() => {
-    if (!user) return;
-    setLoading(true);
-    let query = supabase.from("query_logs").select("*").order("created_at", { ascending: false }).limit(200);
-    if (filterDb !== "all") query = query.eq("database_id", filterDb);
-    if (filterMethod !== "all") query = query.eq("method", filterMethod);
-    query.then(({ data }) => {
-      const items = data || [];
-      setLogs(items);
-      // Aggregate by day
-      const byDay: Record<string, number> = {};
-      items.forEach((l) => {
-        const day = new Date(l.created_at).toLocaleDateString();
-        byDay[day] = (byDay[day] || 0) + 1;
-      });
-      setChartData(Object.entries(byDay).map(([date, count]) => ({ date, count })).reverse().slice(-14));
-      setLoading(false);
+    const byDay: Record<string, number> = {};
+    filtered.forEach(l => {
+      const day = new Date(l.created_at).toLocaleDateString();
+      byDay[day] = (byDay[day] || 0) + 1;
     });
+    setChartData(Object.entries(byDay).map(([date, count]) => ({ date, count })).reverse().slice(-14));
   }, [user, filterDb, filterMethod]);
 
   const statusColor = (code: number) => code < 300 ? "bg-green-100 text-green-700" : code < 500 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700";
@@ -51,7 +40,7 @@ const QueryLogs = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Query Logs</h1>
-        <p className="text-muted-foreground text-sm">Monitor API usage and performance</p>
+        <p className="text-muted-foreground text-sm">Monitor API usage · Saved in mainwebdb.json</p>
       </div>
 
       {chartData.length > 0 && (
@@ -88,12 +77,10 @@ const QueryLogs = () => {
         </Select>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-      ) : logs.length === 0 ? (
+      {logs.length === 0 ? (
         <Card className="glass-card"><CardContent className="flex flex-col items-center py-12">
           <Activity className="w-12 h-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">No query logs yet. Make some API requests!</p>
+          <p className="text-muted-foreground">No query logs yet.</p>
         </CardContent></Card>
       ) : (
         <Card className="glass-card">
