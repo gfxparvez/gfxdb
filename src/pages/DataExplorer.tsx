@@ -1,97 +1,99 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { loadDB, saveDB, generateId, DatabaseRecord, TableRecord, RowRecord, ColumnRecord } from "@/lib/mainwebdb";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Save, Loader2, Table2 } from "lucide-react";
-import type { Tables as DBTypes, Json } from "@/integrations/supabase/types";
-
-type DBTable = DBTypes<"database_tables">;
-type TableColumn = DBTypes<"table_columns">;
-type TableRowData = DBTypes<"table_rows">;
+import { Plus, Trash2, Save, Table2 } from "lucide-react";
 
 const DataExplorer = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [databases, setDatabases] = useState<DBTypes<"databases">[]>([]);
+  const [databases, setDatabases] = useState<DatabaseRecord[]>([]);
   const [selectedDb, setSelectedDb] = useState("");
-  const [tables, setTables] = useState<DBTable[]>([]);
   const [selectedTable, setSelectedTable] = useState("");
-  const [columns, setColumns] = useState<TableColumn[]>([]);
-  const [rows, setRows] = useState<TableRowData[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [currentTable, setCurrentTable] = useState<TableRecord | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [newRow, setNewRow] = useState<Record<string, string>>({});
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, string>>({});
-  const [page, setPage] = useState(0);
-  const PAGE_SIZE = 20;
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("databases").select("*").order("name").then(({ data }) => setDatabases(data || []));
+    const db = loadDB();
+    setDatabases(db.databases.filter(d => d.user_id === user.id));
   }, [user]);
 
-  useEffect(() => {
-    if (!selectedDb) { setTables([]); return; }
-    supabase.from("database_tables").select("*").eq("database_id", selectedDb).order("name").then(({ data }) => {
-      setTables(data || []);
-      setSelectedTable("");
-    });
-  }, [selectedDb]);
+  const tables = databases.find(d => d.id === selectedDb)?.tables || [];
 
   useEffect(() => {
-    if (!selectedTable) { setColumns([]); setRows([]); return; }
-    setLoading(true);
-    setPage(0);
-    Promise.all([
-      supabase.from("table_columns").select("*").eq("table_id", selectedTable).order("position"),
-      supabase.from("table_rows").select("*").eq("table_id", selectedTable).range(0, PAGE_SIZE - 1).order("created_at"),
-    ]).then(([colRes, rowRes]) => {
-      setColumns(colRes.data || []);
-      setRows(rowRes.data || []);
-      setLoading(false);
-    });
-  }, [selectedTable]);
+    if (!selectedTable) { setCurrentTable(null); return; }
+    const db = loadDB();
+    const dbRec = db.databases.find(d => d.id === selectedDb);
+    const tbl = dbRec?.tables.find(t => t.id === selectedTable);
+    setCurrentTable(tbl || null);
+  }, [selectedTable, selectedDb]);
 
-  const loadPage = async (p: number) => {
-    const { data } = await supabase.from("table_rows").select("*").eq("table_id", selectedTable).range(p * PAGE_SIZE, (p + 1) * PAGE_SIZE - 1).order("created_at");
-    setRows(data || []);
-    setPage(p);
+  const refresh = () => {
+    const db = loadDB();
+    const dbRec = db.databases.find(d => d.id === selectedDb);
+    const tbl = dbRec?.tables.find(t => t.id === selectedTable);
+    setCurrentTable(tbl ? { ...tbl } : null);
+    setDatabases(db.databases.filter(d => d.user_id === user!.id));
   };
 
-  const handleAddRow = async () => {
-    if (!selectedTable) return;
-    const data: Record<string, Json> = {};
-    columns.forEach((c) => { if (newRow[c.name]) data[c.name] = newRow[c.name]; });
-    const { error } = await supabase.from("table_rows").insert({ table_id: selectedTable, data });
-    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Row added" }); setNewRow({}); setAddOpen(false); loadPage(page); }
+  const handleAddRow = () => {
+    if (!selectedDb || !selectedTable) return;
+    const db = loadDB();
+    const dbIdx = db.databases.findIndex(d => d.id === selectedDb);
+    const tblIdx = db.databases[dbIdx]?.tables.findIndex(t => t.id === selectedTable);
+    if (dbIdx < 0 || tblIdx < 0) return;
+
+    const row: RowRecord = {
+      id: generateId(), data: { ...newRow },
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    };
+    db.databases[dbIdx].tables[tblIdx].rows.push(row);
+    saveDB(db);
+    toast({ title: "Row added" });
+    setNewRow({}); setAddOpen(false);
+    refresh();
   };
 
-  const handleSaveEdit = async (rowId: string) => {
-    const data: Record<string, Json> = {};
-    columns.forEach((c) => { if (editData[c.name] !== undefined) data[c.name] = editData[c.name]; });
-    const { error } = await supabase.from("table_rows").update({ data }).eq("id", rowId);
-    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Row updated" }); setEditingRow(null); loadPage(page); }
+  const handleSaveEdit = (rowId: string) => {
+    const db = loadDB();
+    const dbIdx = db.databases.findIndex(d => d.id === selectedDb);
+    const tblIdx = db.databases[dbIdx]?.tables.findIndex(t => t.id === selectedTable);
+    if (dbIdx < 0 || tblIdx < 0) return;
+    const rowIdx = db.databases[dbIdx].tables[tblIdx].rows.findIndex(r => r.id === rowId);
+    if (rowIdx < 0) return;
+    db.databases[dbIdx].tables[tblIdx].rows[rowIdx].data = { ...editData };
+    db.databases[dbIdx].tables[tblIdx].rows[rowIdx].updated_at = new Date().toISOString();
+    saveDB(db);
+    toast({ title: "Row updated" });
+    setEditingRow(null);
+    refresh();
   };
 
-  const handleDeleteRow = async (rowId: string) => {
-    await supabase.from("table_rows").delete().eq("id", rowId);
+  const handleDeleteRow = (rowId: string) => {
+    const db = loadDB();
+    const dbIdx = db.databases.findIndex(d => d.id === selectedDb);
+    const tblIdx = db.databases[dbIdx]?.tables.findIndex(t => t.id === selectedTable);
+    if (dbIdx < 0 || tblIdx < 0) return;
+    db.databases[dbIdx].tables[tblIdx].rows = db.databases[dbIdx].tables[tblIdx].rows.filter(r => r.id !== rowId);
+    saveDB(db);
     toast({ title: "Row deleted" });
-    loadPage(page);
+    refresh();
   };
 
-  const startEdit = (row: TableRowData) => {
+  const startEdit = (row: RowRecord) => {
     setEditingRow(row.id);
     const d: Record<string, string> = {};
-    columns.forEach((c) => { d[c.name] = String((row.data as Record<string, Json>)?.[c.name] ?? ""); });
+    currentTable?.columns.forEach(c => { d[c.name] = String(row.data[c.name] ?? ""); });
     setEditData(d);
   };
 
@@ -99,11 +101,11 @@ const DataExplorer = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Data Explorer</h1>
-        <p className="text-muted-foreground text-sm">Browse and edit data in your tables</p>
+        <p className="text-muted-foreground text-sm">Browse and edit data in your tables · mainwebdb.json</p>
       </div>
 
       <div className="flex gap-3 flex-wrap">
-        <Select value={selectedDb} onValueChange={setSelectedDb}>
+        <Select value={selectedDb} onValueChange={(v) => { setSelectedDb(v); setSelectedTable(""); }}>
           <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select database" /></SelectTrigger>
           <SelectContent>{databases.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
         </Select>
@@ -111,7 +113,7 @@ const DataExplorer = () => {
           <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select table" /></SelectTrigger>
           <SelectContent>{tables.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
         </Select>
-        {selectedTable && (
+        {currentTable && (
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild><Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4" /> Add Row</Button></DialogTrigger>
             <DialogContent>
@@ -120,7 +122,7 @@ const DataExplorer = () => {
                 <DialogDescription>Enter values for each column.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
-                {columns.map((c) => (
+                {currentTable.columns.map((c) => (
                   <div key={c.id} className="space-y-1">
                     <label className="text-sm font-medium">{c.name} <span className="text-muted-foreground">({c.data_type})</span></label>
                     <Input value={newRow[c.name] || ""} onChange={(e) => setNewRow({ ...newRow, [c.name]: e.target.value })} />
@@ -133,9 +135,7 @@ const DataExplorer = () => {
         )}
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-      ) : !selectedTable ? (
+      {!currentTable ? (
         <Card className="glass-card"><CardContent className="flex flex-col items-center py-12">
           <Table2 className="w-12 h-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground">Select a database and table to explore data</p>
@@ -146,21 +146,21 @@ const DataExplorer = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {columns.map((c) => <TableHead key={c.id}>{c.name}</TableHead>)}
+                  {currentTable.columns.map((c) => <TableHead key={c.id}>{c.name}</TableHead>)}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={columns.length + 1} className="text-center text-muted-foreground py-8">No data</TableCell></TableRow>
-                ) : rows.map((row) => (
+                {currentTable.rows.length === 0 ? (
+                  <TableRow><TableCell colSpan={currentTable.columns.length + 1} className="text-center text-muted-foreground py-8">No data</TableCell></TableRow>
+                ) : currentTable.rows.map((row) => (
                   <TableRow key={row.id}>
-                    {columns.map((c) => (
+                    {currentTable.columns.map((c) => (
                       <TableCell key={c.id}>
                         {editingRow === row.id ? (
                           <Input className="h-8 text-sm" value={editData[c.name] || ""} onChange={(e) => setEditData({ ...editData, [c.name]: e.target.value })} />
                         ) : (
-                          <span className="text-sm">{String((row.data as Record<string, Json>)?.[c.name] ?? "")}</span>
+                          <span className="text-sm">{String(row.data[c.name] ?? "")}</span>
                         )}
                       </TableCell>
                     ))}
@@ -176,11 +176,6 @@ const DataExplorer = () => {
                 ))}
               </TableBody>
             </Table>
-          </div>
-          <div className="flex justify-between items-center p-4 border-t border-border">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => loadPage(page - 1)}>Previous</Button>
-            <span className="text-sm text-muted-foreground">Page {page + 1}</span>
-            <Button variant="outline" size="sm" disabled={rows.length < PAGE_SIZE} onClick={() => loadPage(page + 1)}>Next</Button>
           </div>
         </Card>
       )}

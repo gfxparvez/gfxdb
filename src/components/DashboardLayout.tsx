@@ -3,9 +3,10 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import {
-  Database, Key, BarChart3, Settings, LogOut, Menu, X, Home, Table2, ChevronLeft,
+  Database, Key, BarChart3, Settings, LogOut, Menu, X, Home, Table2, ChevronLeft, Shield, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { exportDB } from "@/lib/mainwebdb";
 
 const navItems = [
   { label: "Dashboard", icon: Home, path: "/" },
@@ -13,6 +14,7 @@ const navItems = [
   { label: "API Keys", icon: Key, path: "/api-keys" },
   { label: "Data Explorer", icon: Table2, path: "/explorer" },
   { label: "Query Logs", icon: BarChart3, path: "/logs" },
+  { label: "Copyright", icon: Shield, path: "/settings" },
   { label: "Settings", icon: Settings, path: "/settings" },
 ];
 
@@ -37,7 +39,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
           <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shrink-0">
             <Database className="w-4 h-4 text-white" />
           </div>
-          {!collapsed && <span className="font-bold text-lg tracking-tight font-[Space_Grotesk]">CloudDB</span>}
+          {!collapsed && <span className="font-bold text-lg tracking-tight font-[Space_Grotesk]">GFX DB</span>}
           <button onClick={() => setCollapsed(!collapsed)} className="ml-auto hidden md:block text-sidebar-foreground/60 hover:text-sidebar-foreground">
             <ChevronLeft className={cn("w-4 h-4 transition-transform", collapsed && "rotate-180")} />
           </button>
@@ -46,7 +48,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
         <nav className="flex-1 py-4 space-y-1 px-2">
           {navItems.map((item) => (
             <Link
-              key={item.path}
+              key={item.path + item.label}
               to={item.path}
               onClick={() => setMobileOpen(false)}
               className={cn(
@@ -61,6 +63,17 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             </Link>
           ))}
         </nav>
+
+        {/* Export DB button */}
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => exportDB()}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground w-full"
+          >
+            <Download className="w-5 h-5 shrink-0" />
+            {!collapsed && <span>Export DB</span>}
+          </button>
+        </div>
 
         <div className="p-3 border-t border-sidebar-border">
           <button
@@ -83,8 +96,13 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             <Menu className="w-5 h-5" />
           </button>
           <div className="text-sm text-muted-foreground truncate">{user?.email}</div>
+          <div className="ml-auto text-xs text-muted-foreground">📁 mainwebdb.json</div>
         </header>
         <div className="p-4 md:p-6 max-w-7xl mx-auto">{children}</div>
+        <footer className="border-t border-border p-4 text-center text-xs text-muted-foreground">
+          © {new Date().getFullYear()} GFX DB — All Rights Reserved. Developed by <span className="font-semibold text-primary">GFX DEVELOPER PARVEZ</span>. 
+          Auto Copyright Protection System Active 🛡️
+        </footer>
       </main>
     </div>
   );

@@ -1,44 +1,40 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { loadDB, saveDB, generateId, ApiKeyRecord } from "@/lib/mainwebdb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, RefreshCw, Trash2, Key, Loader2, Eye, EyeOff } from "lucide-react";
+import { Copy, RefreshCw, Trash2, Key, Eye, EyeOff } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-interface ApiKeyWithDb {
-  id: string;
-  key_value: string;
-  name: string;
-  is_active: boolean;
-  created_at: string;
-  database_id: string;
-  databases: { name: string } | null;
+interface ApiKeyWithDb extends ApiKeyRecord {
+  db_name: string;
 }
 
 const ApiKeys = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [keys, setKeys] = useState<ApiKeyWithDb[]>([]);
-  const [loading, setLoading] = useState(true);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [selectedKey, setSelectedKey] = useState<ApiKeyWithDb | null>(null);
 
-  const fetchKeys = async () => {
+  const refresh = () => {
     if (!user) return;
-    const { data } = await supabase.from("api_keys").select("*, databases(name)").order("created_at", { ascending: false });
-    setKeys((data as any) || []);
-    setLoading(false);
+    const db = loadDB();
+    const myKeys = db.api_keys.filter(k => k.user_id === user.id);
+    const enriched: ApiKeyWithDb[] = myKeys.map(k => {
+      const dbRec = db.databases.find(d => d.id === k.database_id);
+      return { ...k, db_name: dbRec?.name || "—" };
+    });
+    setKeys(enriched);
   };
 
-  useEffect(() => { fetchKeys(); }, [user]);
+  useEffect(() => { refresh(); }, [user]);
 
-  const copyKey = (key: string) => {
-    navigator.clipboard.writeText(key);
+  const copyKey = (text: string) => {
+    navigator.clipboard.writeText(text);
     toast({ title: "Copied to clipboard!" });
   };
 
@@ -48,22 +44,31 @@ const ApiKeys = () => {
     setVisibleKeys(next);
   };
 
-  const regenerateKey = async (id: string) => {
-    const newKey = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
-    const { error } = await supabase.from("api_keys").update({ key_value: newKey }).eq("id", id);
-    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "API key regenerated" }); fetchKeys(); }
+  const regenerateKey = (id: string) => {
+    const db = loadDB();
+    const idx = db.api_keys.findIndex(k => k.id === id);
+    if (idx >= 0) {
+      const bytes = new Uint8Array(24);
+      crypto.getRandomValues(bytes);
+      db.api_keys[idx].key_value = 'gfx_' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      saveDB(db);
+      toast({ title: "API key regenerated" });
+      refresh();
+    }
   };
 
-  const deleteKey = async (id: string) => {
-    await supabase.from("api_keys").delete().eq("id", id);
+  const deleteKey = (id: string) => {
+    const db = loadDB();
+    db.api_keys = db.api_keys.filter(k => k.id !== id);
+    saveDB(db);
     toast({ title: "API key deleted" });
-    fetchKeys();
+    if (selectedKey?.id === id) setSelectedKey(null);
+    refresh();
   };
 
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/db-api`;
+  const apiUrl = "https://gfxdb.lovable.app/api";
 
-  const getSnippets = (key: string, dbName: string) => ({
+  const getSnippets = (key: string) => ({
     curl: `curl -X POST "${apiUrl}" \\
   -H "Content-Type: application/json" \\
   -d '{"api_key": "${key}", "action": "select", "table": "your_table"}'`,
@@ -95,12 +100,10 @@ $data = json_decode($response, true);`,
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">API Keys</h1>
-        <p className="text-muted-foreground text-sm">Manage your API keys and get connection snippets</p>
+        <p className="text-muted-foreground text-sm">Manage your API keys · Saved in mainwebdb.json</p>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-      ) : keys.length === 0 ? (
+      {keys.length === 0 ? (
         <Card className="glass-card">
           <CardContent className="flex flex-col items-center py-12">
             <Key className="w-12 h-12 text-muted-foreground mb-4" />
@@ -123,7 +126,7 @@ $data = json_decode($response, true);`,
                 <TableBody>
                   {keys.map((k) => (
                     <TableRow key={k.id} className={selectedKey?.id === k.id ? "bg-muted/50" : ""}>
-                      <TableCell className="font-medium text-sm">{k.databases?.name || "—"}</TableCell>
+                      <TableCell className="font-medium text-sm">{k.db_name}</TableCell>
                       <TableCell>
                         <code className="text-xs bg-muted px-2 py-1 rounded">
                           {visibleKeys.has(k.id) ? k.key_value.slice(0, 20) + "..." : "••••••••••••"}
@@ -169,7 +172,7 @@ $data = json_decode($response, true);`,
                     <TabsTrigger value="javascript" className="flex-1">JavaScript</TabsTrigger>
                     <TabsTrigger value="php" className="flex-1">PHP</TabsTrigger>
                   </TabsList>
-                  {Object.entries(getSnippets(selectedKey.key_value, selectedKey.databases?.name || "")).map(([lang, code]) => (
+                  {Object.entries(getSnippets(selectedKey.key_value)).map(([lang, code]) => (
                     <TabsContent key={lang} value={lang}>
                       <div className="relative">
                         <pre className="bg-muted rounded-lg p-4 text-xs overflow-x-auto"><code>{code}</code></pre>

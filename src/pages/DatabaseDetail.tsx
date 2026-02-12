@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { loadDB, saveDB, generateId, DatabaseRecord, TableRecord, ColumnRecord } from "@/lib/mainwebdb";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,15 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, ArrowLeft, Loader2, Table2 } from "lucide-react";
-import type { Tables } from "@/integrations/supabase/types";
+import { Plus, Trash2, ArrowLeft, Table2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
-type DBTable = Tables<"database_tables">;
-type Column = { name: string; data_type: string; is_nullable: boolean; default_value: string };
-
+type ColumnInput = { name: string; data_type: string; is_nullable: boolean; default_value: string };
 const DATA_TYPES = ["text", "integer", "boolean", "timestamp", "uuid", "jsonb", "float"];
 
 const DatabaseDetail = () => {
@@ -26,67 +23,72 @@ const DatabaseDetail = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [dbName, setDbName] = useState("");
-  const [tables, setTables] = useState<DBTable[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [currentDb, setCurrentDb] = useState<DatabaseRecord | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [tableName, setTableName] = useState("");
-  const [columns, setColumns] = useState<Column[]>([{ name: "", data_type: "text", is_nullable: true, default_value: "" }]);
-  const [creating, setCreating] = useState(false);
+  const [columns, setColumns] = useState<ColumnInput[]>([{ name: "", data_type: "text", is_nullable: true, default_value: "" }]);
 
-  const fetchData = async () => {
-    if (!id) return;
-    const [dbRes, tablesRes] = await Promise.all([
-      supabase.from("databases").select("name").eq("id", id).maybeSingle(),
-      supabase.from("database_tables").select("*").eq("database_id", id).order("created_at"),
-    ]);
-    setDbName(dbRes.data?.name || "");
-    setTables(tablesRes.data || []);
-    setLoading(false);
+  const refresh = () => {
+    if (!user || !id) return;
+    const db = loadDB();
+    const found = db.databases.find(d => d.id === id && d.user_id === user.id);
+    setCurrentDb(found || null);
+    if (!found) navigate("/databases");
   };
 
-  useEffect(() => { fetchData(); }, [id]);
+  useEffect(() => { refresh(); }, [id, user]);
 
   const addColumn = () => setColumns([...columns, { name: "", data_type: "text", is_nullable: true, default_value: "" }]);
   const removeColumn = (i: number) => setColumns(columns.filter((_, idx) => idx !== i));
-  const updateColumn = (i: number, field: keyof Column, value: string | boolean) => {
+  const updateColumn = (i: number, field: keyof ColumnInput, value: string | boolean) => {
     const updated = [...columns];
     (updated[i] as any)[field] = value;
     setColumns(updated);
   };
 
-  const handleCreateTable = async () => {
-    if (!id || !user || !tableName.trim()) return;
-    const validCols = columns.filter((c) => c.name.trim());
+  const handleCreateTable = () => {
+    if (!user || !id || !tableName.trim()) return;
+    const validCols = columns.filter(c => c.name.trim());
     if (validCols.length === 0) { toast({ title: "Add at least one column", variant: "destructive" }); return; }
-    setCreating(true);
-    const { data: tbl, error } = await supabase.from("database_tables").insert({ database_id: id, name: tableName.trim() }).select().single();
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); setCreating(false); return; }
-    const colInserts = validCols.map((c, i) => ({
-      table_id: tbl.id, name: c.name.trim(), data_type: c.data_type, is_nullable: c.is_nullable, default_value: c.default_value || null, position: i,
-    }));
-    await supabase.from("table_columns").insert(colInserts);
+
+    const db = loadDB();
+    const dbIdx = db.databases.findIndex(d => d.id === id);
+    if (dbIdx < 0) return;
+
+    const newTable: TableRecord = {
+      id: generateId(), name: tableName.trim(),
+      columns: validCols.map((c, i) => ({
+        id: generateId(), name: c.name.trim(), data_type: c.data_type,
+        is_nullable: c.is_nullable, default_value: c.default_value || null, position: i,
+      })),
+      rows: [], created_at: new Date().toISOString(),
+    };
+    db.databases[dbIdx].tables.push(newTable);
+    saveDB(db);
     toast({ title: "Table created!" });
     setTableName(""); setColumns([{ name: "", data_type: "text", is_nullable: true, default_value: "" }]); setCreateOpen(false);
-    fetchData();
-    setCreating(false);
+    refresh();
   };
 
-  const handleDeleteTable = async (tableId: string) => {
-    await supabase.from("database_tables").delete().eq("id", tableId);
+  const handleDeleteTable = (tableId: string) => {
+    const db = loadDB();
+    const dbIdx = db.databases.findIndex(d => d.id === id);
+    if (dbIdx < 0) return;
+    db.databases[dbIdx].tables = db.databases[dbIdx].tables.filter(t => t.id !== tableId);
+    saveDB(db);
     toast({ title: "Table deleted" });
-    fetchData();
+    refresh();
   };
 
-  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  if (!currentDb) return null;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/databases")}><ArrowLeft className="w-5 h-5" /></Button>
         <div>
-          <h1 className="text-2xl font-bold">{dbName}</h1>
-          <p className="text-muted-foreground text-sm">Manage tables in this database</p>
+          <h1 className="text-2xl font-bold">{currentDb.name}</h1>
+          <p className="text-muted-foreground text-sm">{currentDb.description || "Manage tables in this database"}</p>
         </div>
       </div>
 
@@ -122,15 +124,13 @@ const DatabaseDetail = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreateTable} disabled={creating || !tableName.trim()} className="gradient-primary text-primary-foreground">
-                {creating && <Loader2 className="w-4 h-4 animate-spin" />} Create Table
-              </Button>
+              <Button onClick={handleCreateTable} disabled={!tableName.trim()} className="gradient-primary text-primary-foreground">Create Table</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {tables.length === 0 ? (
+      {currentDb.tables.length === 0 ? (
         <Card className="glass-card">
           <CardContent className="flex flex-col items-center py-12">
             <Table2 className="w-12 h-12 text-muted-foreground mb-4" />
@@ -143,14 +143,18 @@ const DatabaseDetail = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Table Name</TableHead>
+                <TableHead>Columns</TableHead>
+                <TableHead>Rows</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tables.map((t) => (
+              {currentDb.tables.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">{t.name}</TableCell>
+                  <TableCell>{t.columns.length}</TableCell>
+                  <TableCell>{t.rows.length}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{new Date(t.created_at).toLocaleDateString()}</TableCell>
                   <TableCell className="text-right">
                     <AlertDialog>

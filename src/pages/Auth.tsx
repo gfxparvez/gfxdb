@@ -41,18 +41,17 @@ const Auth = () => {
       if (isLogin) {
         const { error } = await signIn(email, password);
         if (error) {
-          const msg = error.message.includes("Invalid login") ? "Invalid email or password." : error.message;
-          toast({ title: "Login failed", description: msg, variant: "destructive" });
+          toast({ title: "Login failed", description: error.message, variant: "destructive" });
         } else {
           navigate("/");
         }
       } else {
         const { error } = await signUp(email, password, displayName);
         if (error) {
-          const msg = error.message.includes("already registered") ? "An account with this email already exists." : error.message;
-          toast({ title: "Sign up failed", description: msg, variant: "destructive" });
+          toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
         } else {
-          toast({ title: "Check your email", description: "We sent you a confirmation link. Please verify your email to continue." });
+          toast({ title: "Account created!", description: "Welcome to GFX DB!" });
+          navigate("/");
         }
       }
     } finally {
@@ -68,7 +67,7 @@ const Auth = () => {
             <Database className="w-7 h-7 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl font-bold">{isLogin ? "Welcome back" : "Create account"}</CardTitle>
-          <CardDescription>{isLogin ? "Sign in to your DBaaS dashboard" : "Get started with your database service"}</CardDescription>
+          <CardDescription>{isLogin ? "Sign in to GFX DB Dashboard" : "Get started with GFX DB"}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -96,6 +95,9 @@ const Auth = () => {
               {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
             </button>
           </div>
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Data stored in localStorage · mainwebdb.json
+          </p>
         </CardContent>
       </Card>
     </div>
